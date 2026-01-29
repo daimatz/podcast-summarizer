@@ -10,6 +10,11 @@ interface EpisodeInfo {
   audioUrl: string;
 }
 
+interface TranscriptSection {
+  title: string;
+  content: string;
+}
+
 interface CreatedDoc {
   title: string;
   url: string;
@@ -21,7 +26,7 @@ interface CreatedDoc {
  */
 function createEpisodeDoc(
   episode: EpisodeInfo,
-  transcript: string,
+  sections: TranscriptSection[],
   summary400: string,
   summary2000: string
 ): CreatedDoc {
@@ -30,9 +35,6 @@ function createEpisodeDoc(
 
   const doc = DocumentApp.create(docTitle);
   const body = doc.getBody();
-
-  // スタイル設定
-  const headingStyle: GoogleAppsScript.Document.Attribute = DocumentApp.Attribute.HEADING;
 
   // エピソード情報セクション
   const infoHeading = body.appendParagraph('エピソード情報');
@@ -59,13 +61,30 @@ function createEpisodeDoc(
   // 全文書き起こしセクション
   const transcriptHeading = body.appendParagraph('全文書き起こし');
   transcriptHeading.setHeading(DocumentApp.ParagraphHeading.HEADING1);
+  body.appendParagraph('');
 
-  // 長いテキストは段落ごとに分割して追加
-  const paragraphs = transcript.split('\n\n');
-  for (const para of paragraphs) {
-    if (para.trim()) {
-      body.appendParagraph(para.trim());
+  // 各セクションを追加
+  for (const section of sections) {
+    // セクションタイトル（H2）
+    const sectionHeading = body.appendParagraph(section.title);
+    sectionHeading.setHeading(DocumentApp.ParagraphHeading.HEADING2);
+
+    // セクション内容を段落ごとに追加
+    const paragraphs = section.content.split('\n\n');
+    for (const para of paragraphs) {
+      if (para.trim()) {
+        const p = body.appendParagraph(para.trim());
+        // 話者ラベルがある行は太字にする
+        if (para.match(/^[^:：]+[:：]/)) {
+          const colonIndex = para.indexOf(':') !== -1 ? para.indexOf(':') : para.indexOf('：');
+          if (colonIndex > 0 && colonIndex < 20) {
+            p.editAsText().setBold(0, colonIndex, true);
+          }
+        }
+      }
     }
+
+    body.appendParagraph('');
   }
 
   doc.saveAndClose();

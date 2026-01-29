@@ -27,7 +27,7 @@ function sendNotification(docs: DocInfo[]): void {
   let body = '以下のエピソードの要約が作成されました:\n\n';
 
   for (const doc of docs) {
-    body += `📝 ${doc.title}\n`;
+    body += `- ${doc.title}\n`;
     body += `   ${doc.url}\n\n`;
   }
 
