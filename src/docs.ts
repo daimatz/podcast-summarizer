@@ -2,6 +2,27 @@
  * Google Docs 作成モジュール
  */
 
+/**
+ * URLからトラッキングパラメータを除去
+ */
+function cleanUrl(url: string): string {
+  try {
+    const urlObj = new URL(url);
+    const trackingParams = [
+      'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
+      'fbclid', 'gclid', 'gclsrc', 'dclid',
+      'msclkid', 'twclid', 'li_fat_id',
+      'mc_cid', 'mc_eid',
+      'ref', 'ref_src', 'ref_url',
+      '_ga', '_gl', '_hsenc', '_hsmi',
+    ];
+    trackingParams.forEach(param => urlObj.searchParams.delete(param));
+    return urlObj.toString();
+  } catch {
+    return url;
+  }
+}
+
 interface EpisodeInfo {
   title: string;
   podcastName: string;
@@ -43,7 +64,13 @@ function createEpisodeDoc(
   body.appendParagraph(`Podcast: ${episode.podcastName}`);
   body.appendParagraph(`タイトル: ${episode.title}`);
   body.appendParagraph(`公開日: ${dateStr}`);
-  body.appendParagraph(`リンク: ${episode.link}`);
+
+  // リンクをハイパーリンクとして追加
+  const cleanedLink = cleanUrl(episode.link);
+  const linkPara = body.appendParagraph('リンク: ');
+  const linkText = linkPara.appendText(cleanedLink);
+  linkText.setLinkUrl(cleanedLink);
+
   body.appendParagraph('');
 
   // サマリ（400文字）セクション

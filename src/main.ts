@@ -37,6 +37,9 @@ function checkNewEpisodes(): void {
       const lastChecked = getLastChecked(podcast.id);
       const episodes = searchEpisodes(podcast.name, lastChecked);
 
+      // Listen Notes API レート制限対策 (2 req/s)
+      Utilities.sleep(600);
+
       if (episodes.length === 0) {
         Logger.log('No new episodes');
         continue;

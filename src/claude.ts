@@ -28,6 +28,33 @@ interface FormattedTranscript {
   fullText: string;
 }
 
+interface ClaudeRequest {
+  systemPrompt: string;
+  userMessage: string;
+  maxTokens: number;
+}
+
+/**
+ * Claude APIリクエストのオプションを生成
+ */
+function buildClaudeRequestOptions(apiKey: string, systemPrompt: string, userMessage: string, maxTokens: number): GoogleAppsScript.URL_Fetch.URLFetchRequestOptions {
+  return {
+    method: 'post',
+    headers: {
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'Content-Type': 'application/json',
+    },
+    payload: JSON.stringify({
+      model: CLAUDE_MODEL,
+      max_tokens: maxTokens,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userMessage }],
+    }),
+    muteHttpExceptions: true,
+  };
+}
+
 /**
  * Claude APIにメッセージを送信（リトライ機能付き）
  */
@@ -38,34 +65,14 @@ function callClaude(systemPrompt: string, userMessage: string, maxTokens: number
   }
 
   const url = `${CLAUDE_BASE_URL}/messages`;
-
-  const payload = {
-    model: CLAUDE_MODEL,
-    max_tokens: maxTokens,
-    system: systemPrompt,
-    messages: [
-      {
-        role: 'user',
-        content: userMessage,
-      },
-    ],
-  };
+  const options = buildClaudeRequestOptions(apiKey, systemPrompt, userMessage, maxTokens);
 
   const maxRetries = 3;
   let lastError: Error | null = null;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      const response = UrlFetchApp.fetch(url, {
-        method: 'post',
-        headers: {
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'Content-Type': 'application/json',
-        },
-        payload: JSON.stringify(payload),
-        muteHttpExceptions: true,
-      });
+      const response = UrlFetchApp.fetch(url, options);
 
       const responseCode = response.getResponseCode();
       if (responseCode === 200) {
@@ -99,12 +106,56 @@ function callClaude(systemPrompt: string, userMessage: string, maxTokens: number
 }
 
 /**
- * 文字起こしテキストを整形（話者分離・セクション分け）
- * JSON形式で返す
+ * 複数のClaude APIリクエストを並列実行
  */
-function formatTranscript(rawText: string): FormattedTranscript {
-  const systemPrompt = `あなたはPodcastの文字起こしを整形するアシスタントです。
+function callClaudeParallel(requests: ClaudeRequest[]): string[] {
+  const apiKey = getApiKeys().CLAUDE_KEY;
+  if (!apiKey) {
+    throw new Error('Claude API key is not configured');
+  }
 
+  const url = `${CLAUDE_BASE_URL}/messages`;
+
+  const fetchRequests = requests.map(req => ({
+    url: url,
+    ...buildClaudeRequestOptions(apiKey, req.systemPrompt, req.userMessage, req.maxTokens),
+  }));
+
+  Logger.log(`Sending ${requests.length} parallel requests to Claude API...`);
+  const responses = UrlFetchApp.fetchAll(fetchRequests);
+
+  return responses.map((response, index) => {
+    const responseCode = response.getResponseCode();
+    if (responseCode !== 200) {
+      throw new Error(`Claude API error for request ${index + 1}: ${responseCode} - ${response.getContentText()}`);
+    }
+    const data = JSON.parse(response.getContentText()) as ClaudeResponse;
+    return data.content[0].text;
+  });
+}
+
+const FORMAT_CHUNK_THRESHOLD = 12000;
+
+/**
+ * テキストを文の境界（句点）で分割
+ */
+function findSentenceBoundary(text: string, targetPosition: number): number {
+  // 目標位置より後ろで最初の句点を探す
+  for (let i = targetPosition; i < Math.min(text.length, targetPosition + 500); i++) {
+    if (text[i] === '。' || text[i] === '.' || text[i] === '\n') {
+      return i + 1;
+    }
+  }
+  // 見つからなければ目標位置をそのまま返す
+  return targetPosition;
+}
+
+/**
+ * 整形用のシステムプロンプトを生成
+ */
+function buildFormatSystemPrompt(partInfo: string = ''): string {
+  return `あなたはPodcastの文字起こしを整形するアシスタントです。
+${partInfo}
 以下のタスクを実行してください:
 
 1. **話者分離**: 発言者を識別し、各発言の前に話者ラベルを付けてください
@@ -116,7 +167,7 @@ function formatTranscript(rawText: string): FormattedTranscript {
    - 重要: 名前を推測や創作しないでください。確実に特定できる場合のみ実名を使用
 
 2. **セクション分け**: 話題の変わり目でセクションを区切り、各セクションにタイトルを付けてください
-   - 1つのエピソードを5〜10個程度のセクションに分割
+   - この部分を3〜6個程度のセクションに分割
    - セクションタイトルは内容を端的に表す日本語で
 
 3. **整形**: 読みやすい日本語の文章に整形してください
@@ -134,34 +185,100 @@ function formatTranscript(rawText: string): FormattedTranscript {
     }
   ]
 }`;
+}
 
-  const result = callClaude(systemPrompt, rawText, 16384);
-
+/**
+ * Claude APIの結果をパースしてセクションを抽出
+ */
+function parseFormatResult(result: string): { sections: Section[] } {
   try {
-    // JSON部分を抽出（前後に説明文がある場合に対応）
     const jsonMatch = result.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       throw new Error('JSON not found in response');
     }
-    const parsed = JSON.parse(jsonMatch[0]) as { sections: Section[] };
+    return JSON.parse(jsonMatch[0]) as { sections: Section[] };
+  } catch (e) {
+    Logger.log(`JSON parse error: ${(e as Error).message}`);
+    return { sections: [{ title: '（整形エラー）', content: result }] };
+  }
+}
 
-    // fullText を生成
+/**
+ * 単一チャンクを整形処理
+ */
+function formatTranscriptChunk(rawText: string, partInfo: string = ''): { sections: Section[] } {
+  const result = callClaude(buildFormatSystemPrompt(partInfo), rawText, 16384);
+  return parseFormatResult(result);
+}
+
+/**
+ * テキストを閾値に基づいてチャンクに分割（オーバーラップなし）
+ */
+function splitTextIntoChunks(text: string): string[] {
+  if (text.length <= FORMAT_CHUNK_THRESHOLD) {
+    return [text];
+  }
+
+  const chunks: string[] = [];
+  const numChunks = Math.ceil(text.length / FORMAT_CHUNK_THRESHOLD);
+  const chunkSize = Math.ceil(text.length / numChunks);
+
+  Logger.log(`Splitting ${text.length} chars into ${numChunks} chunks (target size: ${chunkSize})`);
+
+  let currentPos = 0;
+  for (let i = 0; i < numChunks; i++) {
+    const endTarget = currentPos + chunkSize;
+    const end = i === numChunks - 1 ? text.length : findSentenceBoundary(text, endTarget);
+
+    chunks.push(text.slice(currentPos, end));
+    Logger.log(`Chunk ${i + 1}: ${currentPos}-${end} (${end - currentPos} chars)`);
+    currentPos = end;
+  }
+
+  return chunks;
+}
+
+/**
+ * 文字起こしテキストを整形（話者分離・セクション分け）
+ * 長いテキストは分割して並列処理
+ */
+function formatTranscript(rawText: string): FormattedTranscript {
+  const chunks = splitTextIntoChunks(rawText);
+
+  if (chunks.length === 1) {
+    Logger.log(`Processing as single chunk (${rawText.length} chars)`);
+    const parsed = formatTranscriptChunk(rawText);
     const fullText = parsed.sections
       .map(s => `## ${s.title}\n\n${s.content}`)
       .join('\n\n---\n\n');
-
-    return {
-      sections: parsed.sections,
-      fullText: fullText,
-    };
-  } catch (e) {
-    // JSONパースに失敗した場合はフォールバック
-    Logger.log(`JSON parse error: ${(e as Error).message}`);
-    return {
-      sections: [{ title: '全文', content: result }],
-      fullText: result,
-    };
+    return { sections: parsed.sections, fullText };
   }
+
+  // 複数チャンクは並列処理
+  Logger.log(`Processing ${chunks.length} chunks in parallel...`);
+
+  const requests: ClaudeRequest[] = chunks.map((chunk, i) => ({
+    systemPrompt: buildFormatSystemPrompt(`これはPodcastの${i + 1}/${chunks.length}パート目です。`),
+    userMessage: chunk,
+    maxTokens: 16384,
+  }));
+
+  const results = callClaudeParallel(requests);
+
+  const allSections: Section[] = [];
+  for (let i = 0; i < results.length; i++) {
+    const parsed = parseFormatResult(results[i]);
+    Logger.log(`Chunk ${i + 1}: ${parsed.sections.length} sections`);
+    allSections.push(...parsed.sections);
+  }
+
+  const fullText = allSections
+    .map(s => `## ${s.title}\n\n${s.content}`)
+    .join('\n\n---\n\n');
+
+  Logger.log(`Combined: ${allSections.length} sections total`);
+
+  return { sections: allSections, fullText };
 }
 
 /**
