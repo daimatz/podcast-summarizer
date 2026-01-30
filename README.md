@@ -1,124 +1,122 @@
 # Podcast Summarizer
 
-Google Apps Script で動作する Podcast 要約ツール。新しいエピソードを自動でチェックし、音声を文字起こしして Claude で要約を生成し、Google Docs に保存します。
+GitHub Actions で動作する Podcast 要約ツール。新しいエピソードを自動でチェックし、音声を文字起こしして Claude で要約を生成し、Markdown として GitHub Pages に公開します。
 
 ## 技術スタック
 
-- **言語**: TypeScript + Clasp
+- **言語**: TypeScript (Node.js)
+- **実行環境**: GitHub Actions
+- **Podcast検索**: Podcast Index API
 - **音声認識**: Lemonfox.ai API
-- **Podcast検索**: Listen Notes API
 - **要約生成**: Claude API (Anthropic)
-- **出力**: Google Docs
-- **通知**: Gmail
+- **出力**: Markdown (GitHub Pages)
+- **通知**: Email (Gmail)
 
 ## セットアップ
 
-### 1. 依存関係のインストール
+### 1. リポジトリをフォーク/クローン
 
 ```bash
+git clone https://github.com/your-username/podcast-summarizer.git
+cd podcast-summarizer
 npm install
 ```
 
-### 2. Clasp ログイン
+### 2. GitHub Secrets の設定
 
-```bash
-npx clasp login
-```
+リポジトリの Settings → Secrets and variables → Actions で以下を設定:
 
-### 3. Google Apps Script プロジェクト作成
-
-新規作成の場合:
-```bash
-npx clasp create --title "Podcast Summarizer" --type standalone
-```
-
-既存のプロジェクトに接続する場合は、`.clasp.json` の `scriptId` を更新してください。
-
-### 4. デプロイ
-
-```bash
-npm run push
-```
-
-### 5. API キーの設定
-
-GAS エディタを開きます:
-```bash
-npm run open
-```
-
-`setApiKeysManual()` 関数内の値を編集して実行するか、プロジェクト設定 > スクリプトプロパティで以下を設定:
-
-| プロパティ名 | 説明 |
-|------------|------|
-| `LISTEN_NOTES_KEY` | Listen Notes API キー |
+| Secret名 | 説明 |
+|----------|------|
+| `PI_API_KEY` | Podcast Index API キー |
+| `PI_API_SECRET` | Podcast Index API シークレット |
 | `LEMONFOX_KEY` | Lemonfox.ai API キー |
 | `CLAUDE_KEY` | Claude API キー |
-| `NOTIFICATION_EMAIL` | 通知先メールアドレス（省略時は実行ユーザーのメール） |
+| `EMAIL_USER` | Gmail アドレス（通知用） |
+| `EMAIL_PASS` | Gmail アプリパスワード |
+| `NOTIFICATION_EMAIL` | 通知先メールアドレス |
 
-### 6. Podcast の登録
+### 3. Podcast の登録
 
-プロジェクト設定 > スクリプトプロパティで以下の形式で追加:
+`config/podcasts.yaml` を編集:
 
-| プロパティ名 | 値 |
-|------------|-----|
-| `PODCAST_1` | Rebuild |
-| `PODCAST_2` | backspace.fm |
+```yaml
+podcasts:
+  - name: Rebuild
+    feedId: 316425
+  - name: backspace.fm
+    feedId: 123456
+```
 
-`PODCAST_` の後ろは任意のキー、値が検索キーワード（Podcast 名）です。
-Listen Notes の検索 API でこのキーワードを使ってエピソードを検索します。
+`feedId` は Podcast Index の Feed ID です。以下で検索できます:
+```bash
+curl "https://api.podcastindex.org/api/1.0/search/byterm?q=Rebuild" \
+  -H "X-Auth-Key: ${PI_API_KEY}" \
+  -H "X-Auth-Date: ${AUTH_DATE}" \
+  -H "Authorization: ${AUTH_HASH}"
+```
 
-### 7. トリガーの設定
+### 4. GitHub Pages の設定
 
-GAS エディタで「トリガー」（時計アイコン）から手動で設定:
-- 関数: `checkNewEpisodes`
-- イベントソース: 時間主導型
-- 時間ベースのトリガータイプ: 時間ベースのタイマー
-- 間隔: 1時間おき（推奨）
+Settings → Pages で:
+- Source: Deploy from a branch
+- Branch: main, /docs
 
-## 使用方法
+### 5. 手動実行でテスト
 
-### 手動実行
+Actions タブ → Podcast Summarizer → Run workflow
 
-GAS エディタで `checkNewEpisodes()` を実行。
+## ローカル実行
 
-### 設定確認
+```bash
+export PI_API_KEY=...
+export PI_API_SECRET=...
+export LEMONFOX_KEY=...
+export CLAUDE_KEY=...
+npm run dev
+```
 
-GAS エディタで `checkConfiguration()` を実行すると、現在の設定状態が確認できます。
-
-### Podcast の追加/削除
-
-スクリプトプロパティで `PODCAST_<id>` を追加/削除するだけです。
-
-## ファイル構造
+## ファイル構成
 
 ```
-src/
-├── main.ts        # メインエントリーポイント、トリガー設定
-├── config.ts      # PropertiesService 管理
-├── listenNotes.ts # Listen Notes API クライアント
-├── lemonfox.ts    # Lemonfox.ai STT クライアント
-├── claude.ts      # Claude API クライアント
-├── docs.ts        # Google Docs 作成
-└── mail.ts        # メール通知
+podcast-summarizer/
+├── .github/workflows/
+│   └── summarize.yml     # GitHub Actions ワークフロー
+├── src/
+│   ├── index.ts          # エントリーポイント
+│   ├── config.ts         # 設定管理
+│   ├── podcastIndex.ts   # Podcast Index API
+│   ├── lemonfox.ts       # 音声文字起こし
+│   ├── claude.ts         # Claude API（整形・要約）
+│   └── markdown.ts       # Markdown 生成
+├── config/
+│   └── podcasts.yaml     # 購読 Podcast リスト
+├── state/
+│   └── last-checked.json # 最終確認日時
+└── docs/                 # GitHub Pages 公開ディレクトリ
+    ├── index.md
+    └── episodes/
 ```
 
 ## 生成されるドキュメント
 
-各エピソードごとに以下の構成で Google Docs が作成されます:
+各エピソードごとに以下の構成で Markdown が作成されます:
 
 1. **エピソード情報** - タイトル、公開日、リンク
 2. **サマリ（400文字）** - 簡潔な要約
 3. **サマリ（2000文字）** - 詳細な要約
-4. **全文書き起こし** - 整形済みの文字起こし
+4. **全文書き起こし** - 話者分離・セクション分けされた文字起こし
 
-ドキュメントは「Podcast Summaries」フォルダ内に Podcast ごとのサブフォルダで整理されます。
+## スケジュール
+
+デフォルトで毎日 15:00 JST (06:00 UTC) に実行されます。
+`.github/workflows/summarize.yml` の cron 設定で変更可能。
 
 ## 注意事項
 
-- GAS の実行時間制限（6分）があるため、非常に長いエピソードは処理できない場合があります
-- Lemonfox.ai の音声ファイルサイズ制限を確認してください
 - API の利用料金が発生する場合があります
+- 長時間のエピソードは処理に時間がかかります
+- GitHub Pages は公開されるため、URL を知っている人はアクセス可能です
 
 ## ライセンス
 
