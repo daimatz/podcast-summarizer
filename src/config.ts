@@ -1,115 +1,57 @@
-/**
- * PropertiesService を使用した設定管理モジュール
- */
+import * as fs from 'fs';
+import * as path from 'path';
 
-interface ApiKeys {
-  LISTEN_NOTES_KEY: string;
-  LEMONFOX_KEY: string;
-  CLAUDE_KEY: string;
-}
-
-interface PodcastEntry {
+export interface PodcastEntry {
   id: string;
   name: string;
+  feedId: string;
 }
 
-/**
- * API キーを取得
- */
-function getApiKeys(): ApiKeys {
-  const props = PropertiesService.getScriptProperties();
-  return {
-    LISTEN_NOTES_KEY: props.getProperty('LISTEN_NOTES_KEY') || '',
-    LEMONFOX_KEY: props.getProperty('LEMONFOX_KEY') || '',
-    CLAUDE_KEY: props.getProperty('CLAUDE_KEY') || '',
-  };
+export interface Config {
+  podcasts: PodcastEntry[];
 }
 
-/**
- * 購読 Podcast リストを取得
- *
- * スクリプトプロパティで以下の形式で設定:
- *   PODCAST_<任意のキー> = 検索キーワード
- *
- * 例:
- *   PODCAST_1 = Rebuild
- *   PODCAST_2 = backspace.fm
- *
- * 検索キーワードは Listen Notes の検索 API で使用される
- */
-function getPodcasts(): PodcastEntry[] {
-  const props = PropertiesService.getScriptProperties();
-  const allProps = props.getProperties();
-  const podcasts: PodcastEntry[] = [];
+export interface State {
+  lastChecked: Record<string, number>; // feedId -> timestamp (ms)
+}
 
-  for (const key in allProps) {
-    if (key.startsWith('PODCAST_')) {
-      const id = key.substring('PODCAST_'.length);
-      const name = allProps[key];
-      if (id && name) {
-        podcasts.push({ id, name });
-      }
-    }
+const CONFIG_PATH = path.join(process.cwd(), 'config', 'podcasts.json');
+const STATE_PATH = path.join(process.cwd(), 'state', 'last-checked.json');
+
+export function getConfig(): Config {
+  if (!fs.existsSync(CONFIG_PATH)) {
+    return { podcasts: [] };
   }
-
-  return podcasts;
+  return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
 }
 
-/**
- * Podcast を追加
- */
-function addPodcast(podcastId: string, name: string): void {
-  const props = PropertiesService.getScriptProperties();
-  const key = `PODCAST_${podcastId}`;
-  if (props.getProperty(key)) {
-    Logger.log(`Podcast ${podcastId} is already registered.`);
-    return;
+export function getState(): State {
+  if (!fs.existsSync(STATE_PATH)) {
+    return { lastChecked: {} };
   }
-  props.setProperty(key, name);
-  Logger.log(`Added podcast: ${name} (${podcastId})`);
+  return JSON.parse(fs.readFileSync(STATE_PATH, 'utf-8'));
 }
 
-/**
- * Podcast を削除
- */
-function removePodcast(podcastId: string): void {
-  const props = PropertiesService.getScriptProperties();
-  const key = `PODCAST_${podcastId}`;
-  props.deleteProperty(key);
-  Logger.log(`Removed podcast: ${podcastId}`);
+export function saveState(state: State): void {
+  fs.writeFileSync(STATE_PATH, JSON.stringify(state, null, 2));
 }
 
-/**
- * 最終確認日時を取得
- */
-function getLastChecked(podcastId: string): Date | null {
-  const props = PropertiesService.getScriptProperties();
-  const timestamp = props.getProperty(`LAST_CHECKED_${podcastId}`);
-  if (!timestamp) return null;
-  return new Date(parseInt(timestamp, 10));
+export function getLastChecked(feedId: string): Date | null {
+  const state = getState();
+  const timestamp = state.lastChecked[feedId];
+  return timestamp ? new Date(timestamp) : null;
 }
 
-/**
- * 最終確認日時を設定
- */
-function setLastChecked(podcastId: string, date: Date): void {
-  const props = PropertiesService.getScriptProperties();
-  props.setProperty(`LAST_CHECKED_${podcastId}`, date.getTime().toString());
+export function setLastChecked(feedId: string, date: Date): void {
+  const state = getState();
+  state.lastChecked[feedId] = date.getTime();
+  saveState(state);
 }
 
-/**
- * 通知先メールアドレスを取得
- */
-function getNotificationEmail(): string {
-  const props = PropertiesService.getScriptProperties();
-  return props.getProperty('NOTIFICATION_EMAIL') || Session.getActiveUser().getEmail();
-}
-
-/**
- * 通知先メールアドレスを設定
- */
-function setNotificationEmail(email: string): void {
-  const props = PropertiesService.getScriptProperties();
-  props.setProperty('NOTIFICATION_EMAIL', email);
-  Logger.log(`Notification email set to: ${email}`);
+export function getEnv(key: string): string {
+  const value = process.env[key];
+  if (!value) {
+    throw new Error(`Environment variable ${key} is not set`);
+  }
+  return value;
 }

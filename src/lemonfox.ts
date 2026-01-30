@@ -1,7 +1,4 @@
-/**
- * Lemonfox.ai Speech-to-Text API クライアント
- * https://lemonfox.ai/docs
- */
+import { getEnv } from './config.js';
 
 const LEMONFOX_BASE_URL = 'https://api.lemonfox.ai/v1';
 
@@ -9,59 +6,44 @@ interface TranscriptionResponse {
   text: string;
 }
 
-/**
- * 音声URLから文字起こしを実行
- * @param audioUrl 音声ファイルのURL
- * @returns 文字起こしテキスト
- */
-function transcribe(audioUrl: string): string {
-  const apiKey = getApiKeys().LEMONFOX_KEY;
-  if (!apiKey) {
-    throw new Error('Lemonfox API key is not configured');
-  }
+async function transcribe(audioUrl: string): Promise<string> {
+  const apiKey = getEnv('LEMONFOX_KEY');
 
-  const url = `${LEMONFOX_BASE_URL}/audio/transcriptions`;
-
-  const payload = {
-    file: audioUrl,
-    language: 'ja',
-    response_format: 'json',
-  };
-
-  const response = UrlFetchApp.fetch(url, {
-    method: 'post',
+  const response = await fetch(`${LEMONFOX_BASE_URL}/audio/transcriptions`, {
+    method: 'POST',
     headers: {
-      'Authorization': `Bearer ${apiKey}`,
+      Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
-    payload: JSON.stringify(payload),
-    muteHttpExceptions: true,
+    body: JSON.stringify({
+      file: audioUrl,
+      language: 'ja',
+      response_format: 'json',
+    }),
   });
 
-  const responseCode = response.getResponseCode();
-  if (responseCode !== 200) {
-    throw new Error(`Lemonfox API error: ${responseCode} - ${response.getContentText()}`);
+  if (!response.ok) {
+    throw new Error(`Lemonfox API error: ${response.status} - ${await response.text()}`);
   }
 
-  const data = JSON.parse(response.getContentText()) as TranscriptionResponse;
+  const data = (await response.json()) as TranscriptionResponse;
   return data.text;
 }
 
-/**
- * 長い音声の場合、チャンクに分割して処理する（将来の拡張用）
- * GASの6分制限があるため、非常に長い音声は処理できない可能性がある
- */
-function transcribeWithRetry(audioUrl: string, maxRetries: number = 3): string {
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function transcribeWithRetry(audioUrl: string, maxRetries: number = 3): Promise<string> {
   let lastError: Error | null = null;
 
   for (let i = 0; i < maxRetries; i++) {
     try {
-      return transcribe(audioUrl);
+      return await transcribe(audioUrl);
     } catch (e) {
       lastError = e as Error;
-      Logger.log(`Transcription attempt ${i + 1} failed: ${lastError.message}`);
-      // 少し待ってからリトライ
-      Utilities.sleep(2000 * (i + 1));
+      console.log(`Transcription attempt ${i + 1} failed: ${lastError.message}`);
+      await sleep(2000 * (i + 1));
     }
   }
 
