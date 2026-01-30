@@ -6,8 +6,34 @@ interface TranscriptionResponse {
   text: string;
 }
 
+async function resolveRedirects(url: string): Promise<string> {
+  let currentUrl = url;
+  const maxRedirects = 10;
+
+  for (let i = 0; i < maxRedirects; i++) {
+    const response = await fetch(currentUrl, {
+      method: 'HEAD',
+      redirect: 'manual',
+    });
+
+    const location = response.headers.get('location');
+    if (!location) {
+      return currentUrl;
+    }
+
+    // 相対URLの場合は絶対URLに変換
+    currentUrl = new URL(location, currentUrl).toString();
+  }
+
+  return currentUrl;
+}
+
 async function transcribe(audioUrl: string): Promise<string> {
   const apiKey = getEnv('LEMONFOX_KEY');
+
+  // リダイレクトを解決して最終URLを取得
+  const resolvedUrl = await resolveRedirects(audioUrl);
+  console.log(`Resolved URL: ${resolvedUrl}`);
 
   const response = await fetch(`${LEMONFOX_BASE_URL}/audio/transcriptions`, {
     method: 'POST',
@@ -16,7 +42,7 @@ async function transcribe(audioUrl: string): Promise<string> {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      file: audioUrl,
+      file: resolvedUrl,
       language: 'ja',
       response_format: 'json',
     }),

@@ -11,6 +11,7 @@ interface ProcessedEpisode {
 
 async function processEpisode(episode: Episode, podcastName: string): Promise<CreatedMarkdown> {
   console.log(`Processing: ${episode.title}`);
+  console.log(`Audio URL: ${episode.audioUrl}`);
 
   // 1. 音声文字起こし
   console.log('Transcribing audio...');
