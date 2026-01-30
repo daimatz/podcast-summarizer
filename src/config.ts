@@ -1,8 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import * as yaml from 'js-yaml';
 
 export interface PodcastEntry {
-  id: string;
   name: string;
   feedId: string;
 }
@@ -15,14 +15,16 @@ export interface State {
   lastChecked: Record<string, number>; // feedId -> timestamp (ms)
 }
 
-const CONFIG_PATH = path.join(process.cwd(), 'config', 'podcasts.json');
+const CONFIG_PATH = path.join(process.cwd(), 'config', 'podcasts.yaml');
 const STATE_PATH = path.join(process.cwd(), 'state', 'last-checked.json');
 
 export function getConfig(): Config {
   if (!fs.existsSync(CONFIG_PATH)) {
     return { podcasts: [] };
   }
-  return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
+  const content = fs.readFileSync(CONFIG_PATH, 'utf-8');
+  const data = yaml.load(content) as { podcasts?: PodcastEntry[] } | null;
+  return { podcasts: data?.podcasts ?? [] };
 }
 
 export function getState(): State {
