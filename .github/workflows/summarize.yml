@@ -63,8 +63,8 @@ jobs:
           body: |
             新しいポッドキャストの要約が追加されました。
 
-            GitHub Pages で確認:
-            https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+            リポジトリで確認:
+            https://github.com/${{ github.repository }}/tree/main/episodes
 
             ---
             Podcast Summarizer

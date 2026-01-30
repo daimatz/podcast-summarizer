@@ -2,7 +2,7 @@ import { getConfig, getLastChecked, setLastChecked } from './config.js';
 import { getEpisodesByFeedId, type Episode } from './podcastIndex.js';
 import { transcribeWithRetry } from './lemonfox.js';
 import { formatTranscript, summarize400, summarize2000 } from './claude.js';
-import { createEpisodeMarkdown, updateIndex, type CreatedMarkdown } from './markdown.js';
+import { createEpisodeMarkdown, type CreatedMarkdown } from './markdown.js';
 
 interface ProcessedEpisode {
   episode: Episode;
@@ -82,10 +82,6 @@ async function main(): Promise<void> {
   }
 
   if (processed.length > 0) {
-    // インデックスを更新
-    updateIndex();
-    console.log('\nIndex updated');
-
     // 処理結果を出力（GitHub Actions で使用）
     console.log('\n=== Processed Episodes ===');
     for (const { episode, markdown } of processed) {

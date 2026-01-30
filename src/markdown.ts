@@ -84,10 +84,10 @@ ${summary2000}
 ${formatted.fullText}
 `;
 
-  const docsDir = path.join(process.cwd(), 'docs', 'episodes', podcastDir);
-  fs.mkdirSync(docsDir, { recursive: true });
+  const episodesDir = path.join(process.cwd(), 'episodes', podcastDir);
+  fs.mkdirSync(episodesDir, { recursive: true });
 
-  const filePath = path.join(docsDir, filename);
+  const filePath = path.join(episodesDir, filename);
   fs.writeFileSync(filePath, content);
 
   return {
@@ -97,43 +97,3 @@ ${formatted.fullText}
   };
 }
 
-export function updateIndex(): void {
-  const episodesDir = path.join(process.cwd(), 'docs', 'episodes');
-
-  if (!fs.existsSync(episodesDir)) {
-    return;
-  }
-
-  const podcasts = fs.readdirSync(episodesDir).filter((f) => {
-    return fs.statSync(path.join(episodesDir, f)).isDirectory();
-  });
-
-  let indexContent = `# Podcast Summaries
-
-`;
-
-  for (const podcast of podcasts.sort()) {
-    const podcastDir = path.join(episodesDir, podcast);
-    const files = fs.readdirSync(podcastDir).filter((f) => f.endsWith('.md')).sort().reverse();
-
-    if (files.length === 0) continue;
-
-    indexContent += `## ${podcast}\n\n`;
-
-    for (const file of files.slice(0, 10)) {
-      const filePath = path.join(podcastDir, file);
-      const content = fs.readFileSync(filePath, 'utf-8');
-      const titleMatch = content.match(/^# (.+)$/m);
-      const title = titleMatch ? titleMatch[1] : file.replace('.md', '');
-      indexContent += `- [${title}](episodes/${podcast}/${file})\n`;
-    }
-
-    if (files.length > 10) {
-      indexContent += `- ... and ${files.length - 10} more\n`;
-    }
-
-    indexContent += '\n';
-  }
-
-  fs.writeFileSync(path.join(process.cwd(), 'docs', 'index.md'), indexContent);
-}

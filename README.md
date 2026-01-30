@@ -1,6 +1,6 @@
 # Podcast Summarizer
 
-GitHub Actions で動作する Podcast 要約ツール。新しいエピソードを自動でチェックし、音声を文字起こしして Claude で要約を生成し、Markdown として GitHub Pages に公開します。
+GitHub Actions で動作する Podcast 要約ツール。新しいエピソードを自動でチェックし、音声を文字起こしして Claude で要約を生成します。
 
 ## 技術スタック
 
@@ -9,7 +9,7 @@ GitHub Actions で動作する Podcast 要約ツール。新しいエピソー�
 - **Podcast検索**: Podcast Index API
 - **音声認識**: Lemonfox.ai API
 - **要約生成**: Claude API (Anthropic)
-- **出力**: Markdown (GitHub Pages)
+- **出力**: Markdown (リポジトリに保存)
 - **通知**: Email (Gmail)
 
 ## セットアップ
@@ -87,13 +87,7 @@ curl "https://api.podcastindex.org/api/1.0/search/byterm?q=Rebuild" \
   -H "Authorization: ${AUTH_HASH}"
 ```
 
-### 4. GitHub Pages の設定
-
-Settings → Pages で:
-- Source: Deploy from a branch
-- Branch: main, /docs
-
-### 5. 手動実行でテスト
+### 4. 手動実行でテスト
 
 Actions タブ → Podcast Summarizer → Run workflow
 
@@ -124,9 +118,7 @@ podcast-summarizer/
 │   └── podcasts.yaml     # 購読 Podcast リスト
 ├── state/
 │   └── last-checked.json # 最終確認日時
-└── docs/                 # GitHub Pages 公開ディレクトリ
-    ├── index.md
-    └── episodes/
+└── episodes/             # 生成された要約
 ```
 
 ## 生成されるドキュメント
@@ -147,7 +139,6 @@ podcast-summarizer/
 
 - API の利用料金が発生する場合があります
 - 長時間のエピソードは処理に時間がかかります
-- GitHub Pages は公開されるため、URL を知っている人はアクセス可能です
 
 ## ライセンス
 
