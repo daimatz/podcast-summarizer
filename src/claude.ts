@@ -31,6 +31,9 @@ async function callClaude(systemPrompt: string, userMessage: string, maxTokens: 
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 900000); // 15分タイムアウト
+
       const response = await fetch(`${CLAUDE_BASE_URL}/messages`, {
         method: 'POST',
         headers: {
@@ -44,7 +47,10 @@ async function callClaude(systemPrompt: string, userMessage: string, maxTokens: 
           system: systemPrompt,
           messages: [{ role: 'user', content: userMessage }],
         }),
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       if (response.ok) {
         const data = (await response.json()) as ClaudeResponse;
@@ -60,6 +66,9 @@ async function callClaude(systemPrompt: string, userMessage: string, maxTokens: 
     } catch (e) {
       lastError = e as Error;
       console.log(`Claude API attempt ${attempt} failed: ${lastError.message}`);
+      if ((e as any).cause) {
+        console.log(`Error cause:`, (e as any).cause);
+      }
     }
 
     if (attempt < maxRetries) {
