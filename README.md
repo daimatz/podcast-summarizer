@@ -14,12 +14,43 @@ GitHub Actions で動作する Podcast 要約ツール。新しいエピソー�
 
 ## セットアップ
 
-### 1. リポジトリをフォーク/クローン
+### 1. Private リポジトリとして使う（推奨）
+
+購読リストや要約データを非公開にしたい場合、Private リポジトリを作成して upstream として本リポジトリを設定します。
 
 ```bash
-git clone https://github.com/your-username/podcast-summarizer.git
-cd podcast-summarizer
+# 本リポジトリを clone
+git clone https://github.com/daimatz/podcast-summarizer.git my-podcast-data
+cd my-podcast-data
+
+# GitHub で private リポジトリを作成後、remote を設定
+git remote rename origin upstream
+git remote add origin git@github.com:YOUR_USERNAME/my-podcast-data.git
+
+# private リポジトリに push
+git push -u origin main
+
+# 依存関係をインストール
 npm install
+```
+
+#### upstream の更新を取り込む
+
+本リポジトリが更新されたとき:
+
+```bash
+git fetch upstream
+git merge upstream/main
+git push origin main
+```
+
+`config/podcasts.yaml` や `state/` でコンフリクトが発生した場合は、自分の変更を優先:
+
+```bash
+git checkout --ours config/podcasts.yaml
+git checkout --ours state/last-checked.json
+git add .
+git commit
 ```
 
 ### 2. GitHub Secrets の設定
