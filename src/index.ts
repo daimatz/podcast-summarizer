@@ -3,10 +3,13 @@ import { getEpisodesByFeedId, type Episode } from './podcastIndex.js';
 import { transcribeWithRetry } from './lemonfox.js';
 import { formatTranscript, summarize400, summarize2000 } from './claude.js';
 import { createEpisodeMarkdown, type CreatedMarkdown } from './markdown.js';
+import pLimit from 'p-limit';
 
 interface ProcessedEpisode {
   episode: Episode;
   markdown: CreatedMarkdown;
+  podcastName: string;
+  feedId: string;
 }
 
 async function processEpisode(episode: Episode, podcastName: string): Promise<CreatedMarkdown> {
@@ -47,7 +50,8 @@ async function main(): Promise<void> {
     return;
   }
 
-  const processed: ProcessedEpisode[] = [];
+  // 全ポッドキャストから新着エピソードを収集
+  const allTasks: Array<{ episode: Episode; podcastName: string; feedId: string }> = [];
 
   for (const podcast of config.podcasts) {
     try {
@@ -66,19 +70,48 @@ async function main(): Promise<void> {
       console.log(`Found ${episodes.length} new episode(s)`);
 
       for (const episode of episodes) {
-        try {
-          const markdown = await processEpisode(episode, podcast.name);
-          processed.push({ episode, markdown });
-
-          // 処理したエピソードの公開日時を最終確認日時として設定
-          setLastChecked(podcast.feedId, new Date(episode.pubDateMs));
-        } catch (e) {
-          console.error(`Error processing episode ${episode.title}:`, e);
-        }
+        allTasks.push({ episode, podcastName: podcast.name, feedId: podcast.feedId });
       }
     } catch (e) {
       console.error(`Error checking podcast ${podcast.name}:`, e);
     }
+  }
+
+  if (allTasks.length === 0) {
+    console.log('\nNo new episodes to process');
+    return;
+  }
+
+  console.log(`\nProcessing ${allTasks.length} episode(s) with concurrency limit of 5...`);
+
+  // 5並列で処理
+  const limit = pLimit(5);
+  const results = await Promise.all(
+    allTasks.map((task) =>
+      limit(async (): Promise<ProcessedEpisode | null> => {
+        try {
+          const markdown = await processEpisode(task.episode, task.podcastName);
+          return { episode: task.episode, markdown, podcastName: task.podcastName, feedId: task.feedId };
+        } catch (e) {
+          console.error(`Error processing episode ${task.episode.title}:`, e);
+          return null;
+        }
+      })
+    )
+  );
+
+  const processed = results.filter((r): r is ProcessedEpisode => r !== null);
+
+  // 処理成功したエピソードのlastCheckedを更新（feedIdごとに最新のpubDateを設定）
+  const latestByFeed = new Map<string, number>();
+  for (const p of processed) {
+    const current = latestByFeed.get(p.feedId) ?? 0;
+    if (p.episode.pubDateMs > current) {
+      latestByFeed.set(p.feedId, p.episode.pubDateMs);
+    }
+  }
+  for (const [feedId, pubDateMs] of latestByFeed) {
+    setLastChecked(feedId, new Date(pubDateMs));
   }
 
   if (processed.length > 0) {
