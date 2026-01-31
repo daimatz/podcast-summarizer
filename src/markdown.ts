@@ -27,7 +27,7 @@ function formatDate(date: Date): string {
 
 function sanitizeFilename(name: string): string {
   return name
-    .replace(/[/\\?%*:|"<>]/g, '-')
+    .replace(/[/\\?%*:|"<>#]/g, '-')
     .replace(/\s+/g, '-')
     .toLowerCase()
     .slice(0, 100);
