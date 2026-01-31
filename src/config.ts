@@ -31,7 +31,7 @@ export function getConfig(): Config {
   const data = yaml.load(content) as { podcasts?: YamlPodcastEntry[] } | null;
   const podcasts = (data?.podcasts ?? []).map((p) => ({
     name: p.name,
-    podcastIndexId: p.id,
+    podcastIndexId: String(p.id),
   }));
   return { podcasts };
 }
