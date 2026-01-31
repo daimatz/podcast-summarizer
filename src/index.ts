@@ -1,8 +1,8 @@
 import { getConfig, getLastChecked, setLastChecked } from './config.js';
 import { getEpisodesByFeedId, type Episode } from './podcastIndex.js';
 import { transcribeWithRetry } from './lemonfox.js';
-import { formatTranscript, summarize400, summarize2000 } from './claude.js';
-import { createEpisodeMarkdown, type CreatedMarkdown } from './markdown.js';
+import { formatTranscript, summarize400, summarize2000, translateToJapanese } from './claude.js';
+import { createEpisodeMarkdown, type CreatedMarkdown, type TranslatedContent } from './markdown.js';
 import pLimit from 'p-limit';
 
 interface ProcessedEpisode {
@@ -12,29 +12,47 @@ interface ProcessedEpisode {
   podcastIndexId: string;
 }
 
-async function processEpisode(episode: Episode, podcastName: string): Promise<CreatedMarkdown> {
+async function processEpisode(episode: Episode, podcastName: string, sourceLanguage: string): Promise<CreatedMarkdown> {
   console.log(`Processing: ${episode.title}`);
   console.log(`Audio URL: ${episode.audioUrl}`);
+  console.log(`Source language: ${sourceLanguage}`);
 
   // 1. 音声文字起こし
   console.log('Transcribing audio...');
-  const rawTranscript = await transcribeWithRetry(episode.audioUrl);
+  const rawTranscript = await transcribeWithRetry(episode.audioUrl, sourceLanguage);
   console.log(`Transcription complete: ${rawTranscript.length} characters`);
 
-  // 2. テキスト整形（話者分離・セクション分け）
+  // 2. テキスト整形（話者分離・セクション分け）- 元の言語で処理
   console.log('Formatting transcript...');
-  const formatted = await formatTranscript(rawTranscript);
+  const formatted = await formatTranscript(rawTranscript, sourceLanguage);
   console.log(`Formatting complete: ${formatted.sections.length} sections`);
 
-  // 3. サマリ生成
+  // 3. サマリ生成 - 元の言語で処理
   console.log('Generating summaries...');
-  const summary400Text = await summarize400(formatted.fullText);
-  const summary2000Text = await summarize2000(formatted.fullText);
+  const summary400Text = await summarize400(formatted.fullText, sourceLanguage);
+  const summary2000Text = await summarize2000(formatted.fullText, sourceLanguage);
   console.log('Summaries complete');
 
-  // 4. Markdown作成
+  // 4. 翻訳（日本語以外の場合）
+  let translated: TranslatedContent | undefined;
+  if (sourceLanguage !== 'ja') {
+    console.log('Translating to Japanese...');
+    const [translatedSummary400, translatedSummary2000, translatedFullText] = await Promise.all([
+      translateToJapanese(summary400Text, sourceLanguage),
+      translateToJapanese(summary2000Text, sourceLanguage),
+      translateToJapanese(formatted.fullText, sourceLanguage),
+    ]);
+    translated = {
+      summary400: translatedSummary400,
+      summary2000: translatedSummary2000,
+      fullText: translatedFullText,
+    };
+    console.log('Translation complete');
+  }
+
+  // 5. Markdown作成
   console.log('Creating Markdown...');
-  const markdown = createEpisodeMarkdown(episode, podcastName, formatted, summary400Text, summary2000Text);
+  const markdown = createEpisodeMarkdown(episode, podcastName, formatted, summary400Text, summary2000Text, sourceLanguage, translated);
   console.log(`Markdown created: ${markdown.filePath}`);
 
   return markdown;
@@ -51,11 +69,11 @@ async function main(): Promise<void> {
   }
 
   // 全ポッドキャストから新着エピソードを収集
-  const allTasks: Array<{ episode: Episode; podcastName: string; podcastIndexId: string }> = [];
+  const allTasks: Array<{ episode: Episode; podcastName: string; podcastIndexId: string; language: string }> = [];
 
   for (const podcast of config.podcasts) {
     try {
-      console.log(`\nChecking podcast: ${podcast.name} (id: ${podcast.podcastIndexId})`);
+      console.log(`\nChecking podcast: ${podcast.name} (id: ${podcast.podcastIndexId}, language: ${podcast.language})`);
 
       const lastChecked = getLastChecked(podcast.podcastIndexId);
       console.log(`Last checked: ${lastChecked?.toISOString() ?? 'never'}`);
@@ -70,7 +88,7 @@ async function main(): Promise<void> {
       console.log(`Found ${episodes.length} new episode(s)`);
 
       for (const episode of episodes) {
-        allTasks.push({ episode, podcastName: podcast.name, podcastIndexId: podcast.podcastIndexId });
+        allTasks.push({ episode, podcastName: podcast.name, podcastIndexId: podcast.podcastIndexId, language: podcast.language });
       }
     } catch (e) {
       console.error(`Error checking podcast ${podcast.name}:`, e);
@@ -90,7 +108,7 @@ async function main(): Promise<void> {
     allTasks.map((task) =>
       limit(async (): Promise<ProcessedEpisode | null> => {
         try {
-          const markdown = await processEpisode(task.episode, task.podcastName);
+          const markdown = await processEpisode(task.episode, task.podcastName, task.language);
           return { episode: task.episode, markdown, podcastName: task.podcastName, podcastIndexId: task.podcastIndexId };
         } catch (e) {
           console.error(`Error processing episode ${task.episode.title}:`, e);

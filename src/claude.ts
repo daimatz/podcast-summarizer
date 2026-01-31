@@ -106,8 +106,9 @@ function findSentenceBoundary(text: string, targetPosition: number): number {
   return targetPosition;
 }
 
-function buildFormatSystemPrompt(partInfo: string = ''): string {
-  return `あなたはPodcastの文字起こしを整形するアシスタントです。
+function buildFormatSystemPrompt(partInfo: string = '', language: string = 'ja'): string {
+  if (language === 'ja') {
+    return `あなたはPodcastの文字起こしを整形するアシスタントです。
 ${partInfo}
 以下のタスクを実行してください:
 
@@ -135,6 +136,39 @@ ${partInfo}
     {
       "title": "セクションタイトル",
       "content": "ホスト: 発言内容...\\n\\nゲスト: 発言内容..."
+    }
+  ]
+}`;
+  }
+
+  // 英語などその他の言語
+  return `You are an assistant that formats podcast transcriptions.
+${partInfo}
+Please perform the following tasks:
+
+1. **Speaker Separation**: Identify speakers and add speaker labels before each statement
+   - Use real names only if clearly mentioned in the conversation
+   - If names cannot be identified, use role labels:
+     - Main host: "Host:"
+     - Single guest: "Guest:"
+     - Multiple guests: "Guest A:", "Guest B:"
+   - Important: Do not guess or invent names. Only use real names if clearly identified
+
+2. **Section Division**: Divide the content at topic changes and add a title to each section
+   - Divide into approximately 3-6 sections
+   - Section titles should concisely represent the content
+
+3. **Formatting**: Format into readable text
+   - Add appropriate punctuation
+   - Break long sentences appropriately
+   - Add line breaks at paragraph breaks
+
+Output in the following JSON format only (no additional text):
+{
+  "sections": [
+    {
+      "title": "Section Title",
+      "content": "Host: Statement...\\n\\nGuest: Statement..."
     }
   ]
 }`;
@@ -177,12 +211,12 @@ function splitTextIntoChunks(text: string): string[] {
   return chunks;
 }
 
-export async function formatTranscript(rawText: string): Promise<FormattedTranscript> {
+export async function formatTranscript(rawText: string, language: string = 'ja'): Promise<FormattedTranscript> {
   const chunks = splitTextIntoChunks(rawText);
 
   if (chunks.length === 1) {
     console.log(`Processing as single chunk (${rawText.length} chars)`);
-    const result = await callClaude(buildFormatSystemPrompt(), rawText, 16384);
+    const result = await callClaude(buildFormatSystemPrompt('', language), rawText, 16384);
     const parsed = parseFormatResult(result);
     const fullText = parsed.sections.map((s) => `## ${s.title}\n\n${emphasizeSpeakers(s.content)}`).join('\n\n---\n\n');
     return { sections: parsed.sections, fullText };
@@ -190,10 +224,14 @@ export async function formatTranscript(rawText: string): Promise<FormattedTransc
 
   console.log(`Processing ${chunks.length} chunks in parallel...`);
 
+  const partInfoTemplate = language === 'ja'
+    ? (i: number, total: number) => `これはPodcastの${i}/${total}パート目です。`
+    : (i: number, total: number) => `This is part ${i}/${total} of the podcast.`;
+
   const results = await Promise.all(
     chunks.map((chunk, i) => {
-      const partInfo = `これはPodcastの${i + 1}/${chunks.length}パート目です。`;
-      return callClaude(buildFormatSystemPrompt(partInfo), chunk, 16384);
+      const partInfo = partInfoTemplate(i + 1, chunks.length);
+      return callClaude(buildFormatSystemPrompt(partInfo, language), chunk, 16384);
     })
   );
 
@@ -211,23 +249,90 @@ export async function formatTranscript(rawText: string): Promise<FormattedTransc
   return { sections: allSections, fullText };
 }
 
-async function summarize(text: string, maxChars: number): Promise<string> {
-  const systemPrompt = `あなたはPodcastの内容を要約するアシスタントです。
+async function summarize(text: string, maxChars: number, language: string = 'ja'): Promise<string> {
+  const systemPrompt = language === 'ja'
+    ? `あなたはPodcastの内容を要約するアシスタントです。
 
 ルール:
 - ${maxChars}文字程度で要約してください
 - 主要なトピックと結論を含める
 - 話者の名前が分かる場合は「〇〇さんは〜と述べた」のように言及してもよい
 - 箇条書きは使わず、自然な文章で書く
-- 追加の説明や前置きは不要。要約のみを出力`;
+- 追加の説明や前置きは不要。要約のみを出力`
+    : `You are an assistant that summarizes podcast content.
 
-  return callClaude(systemPrompt, `以下のPodcastの内容を要約してください:\n\n${text}`, Math.ceil(maxChars * 1.5));
+Rules:
+- Summarize in approximately ${maxChars} characters
+- Include main topics and conclusions
+- You may mention speaker names if known (e.g., "John said...")
+- Write in natural prose, not bullet points
+- Output only the summary, no additional explanations or preface`;
+
+  const userMessage = language === 'ja'
+    ? `以下のPodcastの内容を要約してください:\n\n${text}`
+    : `Please summarize the following podcast content:\n\n${text}`;
+
+  return callClaude(systemPrompt, userMessage, Math.ceil(maxChars * 1.5));
 }
 
-export async function summarize400(text: string): Promise<string> {
-  return summarize(text, 400);
+export async function summarize400(text: string, language: string = 'ja'): Promise<string> {
+  return summarize(text, 400, language);
 }
 
-export async function summarize2000(text: string): Promise<string> {
-  return summarize(text, 2000);
+export async function summarize2000(text: string, language: string = 'ja'): Promise<string> {
+  return summarize(text, 2000, language);
+}
+
+export async function translateToJapanese(text: string, sourceLanguage: string): Promise<string> {
+  if (sourceLanguage === 'ja') {
+    return text;
+  }
+
+  const systemPrompt = `あなたは優秀な翻訳者です。与えられたテキストを日本語に翻訳してください。
+
+ルール:
+- 自然な日本語に翻訳する
+- 技術用語は一般的な日本語訳を使用し、必要に応じて原語を括弧内に併記
+- 話者ラベル（例: "Host:", "Guest:"）は日本語に翻訳（「ホスト:」「ゲスト:」など）
+- Markdown形式（見出し、太字など）はそのまま維持
+- 追加の説明や前置きは不要。翻訳のみを出力`;
+
+  // テキストが長い場合は分割して処理
+  const CHUNK_SIZE = 10000;
+  if (text.length <= CHUNK_SIZE) {
+    return callClaude(systemPrompt, text, 16384);
+  }
+
+  // 長いテキストはチャンクに分割
+  const chunks = splitTextForTranslation(text, CHUNK_SIZE);
+  console.log(`Translating ${chunks.length} chunks...`);
+
+  const translatedChunks = await Promise.all(
+    chunks.map((chunk, i) => {
+      console.log(`Translating chunk ${i + 1}/${chunks.length}...`);
+      return callClaude(systemPrompt, chunk, 16384);
+    })
+  );
+
+  return translatedChunks.join('\n\n');
+}
+
+function splitTextForTranslation(text: string, targetSize: number): string[] {
+  const chunks: string[] = [];
+  const lines = text.split('\n');
+  let currentChunk = '';
+
+  for (const line of lines) {
+    if (currentChunk.length + line.length + 1 > targetSize && currentChunk.length > 0) {
+      chunks.push(currentChunk);
+      currentChunk = '';
+    }
+    currentChunk += (currentChunk ? '\n' : '') + line;
+  }
+
+  if (currentChunk) {
+    chunks.push(currentChunk);
+  }
+
+  return chunks;
 }

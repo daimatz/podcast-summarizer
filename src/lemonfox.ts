@@ -28,7 +28,7 @@ async function resolveRedirects(url: string): Promise<string> {
   return currentUrl;
 }
 
-async function transcribe(audioUrl: string): Promise<string> {
+async function transcribe(audioUrl: string, language: string = 'ja'): Promise<string> {
   const apiKey = getEnv('LEMONFOX_KEY');
 
   // リダイレクトを解決して最終URLを取得
@@ -43,7 +43,7 @@ async function transcribe(audioUrl: string): Promise<string> {
     },
     body: JSON.stringify({
       file: resolvedUrl,
-      language: 'ja',
+      language: language,
       response_format: 'json',
     }),
   });
@@ -60,12 +60,12 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export async function transcribeWithRetry(audioUrl: string, maxRetries: number = 3): Promise<string> {
+export async function transcribeWithRetry(audioUrl: string, language: string = 'ja', maxRetries: number = 3): Promise<string> {
   let lastError: Error | null = null;
 
   for (let i = 0; i < maxRetries; i++) {
     try {
-      return await transcribe(audioUrl);
+      return await transcribe(audioUrl, language);
     } catch (e) {
       lastError = e as Error;
       console.log(`Transcription attempt ${i + 1} failed: ${lastError.message}`);

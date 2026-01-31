@@ -39,17 +39,27 @@ export interface CreatedMarkdown {
   relativePath: string;
 }
 
+export interface TranslatedContent {
+  summary400: string;
+  summary2000: string;
+  fullText: string;
+}
+
 export function createEpisodeMarkdown(
   episode: Episode,
   podcastName: string,
   formatted: FormattedTranscript,
   summary400: string,
-  summary2000: string
+  summary2000: string,
+  sourceLanguage: string = 'ja',
+  translated?: TranslatedContent
 ): CreatedMarkdown {
   const dateStr = formatDate(new Date(episode.pubDateMs));
   const title = `[${podcastName}] ${episode.title} - ${dateStr}`;
   const filename = `${dateStr}-${episode.id}-${sanitizeFilename(episode.title)}.md`;
   const podcastDir = sanitizeFilename(podcastName);
+
+  const needsTranslation = sourceLanguage !== 'ja' && translated;
 
   const content = `---
 episode_id: ${episode.id}
@@ -58,6 +68,7 @@ podcast: "${podcastName}"
 date: ${dateStr}
 link: ${cleanUrl(episode.link)}
 audio: ${episode.audioUrl}
+language: ${sourceLanguage}
 ---
 
 # ${episode.title}
@@ -65,25 +76,44 @@ audio: ${episode.audioUrl}
 - **Podcast:** ${podcastName}
 - **公開日:** ${dateStr}
 - **リンク:** [${cleanUrl(episode.link)}](${cleanUrl(episode.link)})
+- **元の言語:** ${sourceLanguage}
 
 ---
 
 ## サマリ（400文字）
 
-${summary400}
+${needsTranslation ? translated.summary400 : summary400}
 
 ---
 
 ## サマリ（2000文字）
 
-${summary2000}
+${needsTranslation ? translated.summary2000 : summary2000}
 
 ---
 
 ## 全文書き起こし
 
+${needsTranslation ? translated.fullText : formatted.fullText}
+${needsTranslation ? `
+---
+
+## 原文サマリ（400文字）
+
+${summary400}
+
+---
+
+## 原文サマリ（2000文字）
+
+${summary2000}
+
+---
+
+## 原文書き起こし
+
 ${formatted.fullText}
-`;
+` : ''}`;
 
   const episodesDir = path.join(process.cwd(), 'episodes', podcastDir);
   fs.mkdirSync(episodesDir, { recursive: true });

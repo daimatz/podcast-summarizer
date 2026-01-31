@@ -3,8 +3,8 @@ import * as path from 'path';
 import { getConfig } from './config.js';
 import { getEpisodesByFeedId, type Episode } from './podcastIndex.js';
 import { transcribeWithRetry } from './lemonfox.js';
-import { formatTranscript, summarize400, summarize2000 } from './claude.js';
-import { createEpisodeMarkdown, type CreatedMarkdown } from './markdown.js';
+import { formatTranscript, summarize400, summarize2000, translateToJapanese } from './claude.js';
+import { createEpisodeMarkdown, type CreatedMarkdown, type TranslatedContent } from './markdown.js';
 import pLimit from 'p-limit';
 
 interface ProcessedEpisode {
@@ -33,25 +33,43 @@ function isAlreadyImported(episodeId: string, podcastName: string): boolean {
   return files.some((file) => file.includes(`-${episodeId}-`));
 }
 
-async function processEpisode(episode: Episode, podcastName: string): Promise<CreatedMarkdown> {
+async function processEpisode(episode: Episode, podcastName: string, sourceLanguage: string): Promise<CreatedMarkdown> {
   console.log(`Processing: ${episode.title}`);
   console.log(`Audio URL: ${episode.audioUrl}`);
+  console.log(`Source language: ${sourceLanguage}`);
 
   console.log('Transcribing audio...');
-  const rawTranscript = await transcribeWithRetry(episode.audioUrl);
+  const rawTranscript = await transcribeWithRetry(episode.audioUrl, sourceLanguage);
   console.log(`Transcription complete: ${rawTranscript.length} characters`);
 
   console.log('Formatting transcript...');
-  const formatted = await formatTranscript(rawTranscript);
+  const formatted = await formatTranscript(rawTranscript, sourceLanguage);
   console.log(`Formatting complete: ${formatted.sections.length} sections`);
 
   console.log('Generating summaries...');
-  const summary400Text = await summarize400(formatted.fullText);
-  const summary2000Text = await summarize2000(formatted.fullText);
+  const summary400Text = await summarize400(formatted.fullText, sourceLanguage);
+  const summary2000Text = await summarize2000(formatted.fullText, sourceLanguage);
   console.log('Summaries complete');
 
+  // 翻訳（日本語以外の場合）
+  let translated: TranslatedContent | undefined;
+  if (sourceLanguage !== 'ja') {
+    console.log('Translating to Japanese...');
+    const [translatedSummary400, translatedSummary2000, translatedFullText] = await Promise.all([
+      translateToJapanese(summary400Text, sourceLanguage),
+      translateToJapanese(summary2000Text, sourceLanguage),
+      translateToJapanese(formatted.fullText, sourceLanguage),
+    ]);
+    translated = {
+      summary400: translatedSummary400,
+      summary2000: translatedSummary2000,
+      fullText: translatedFullText,
+    };
+    console.log('Translation complete');
+  }
+
   console.log('Creating Markdown...');
-  const markdown = createEpisodeMarkdown(episode, podcastName, formatted, summary400Text, summary2000Text);
+  const markdown = createEpisodeMarkdown(episode, podcastName, formatted, summary400Text, summary2000Text, sourceLanguage, translated);
   console.log(`Markdown created: ${markdown.filePath}`);
 
   return markdown;
@@ -77,7 +95,8 @@ async function main(): Promise<void> {
   }
 
   const podcastName = podcast.name;
-  console.log(`Importing last ${lastN} episodes from ${podcastName} (ID: ${podcastIndexId})`);
+  const sourceLanguage = podcast.language;
+  console.log(`Importing last ${lastN} episodes from ${podcastName} (ID: ${podcastIndexId}, language: ${sourceLanguage})`);
 
   // 全エピソードを取得（sinceをnullにすると最新1件のみなので、古い日付を指定）
   const farPast = new Date('2000-01-01');
@@ -110,7 +129,7 @@ async function main(): Promise<void> {
     newEpisodes.map((episode) =>
       limit(async (): Promise<ProcessedEpisode | null> => {
         try {
-          const markdown = await processEpisode(episode, podcastName);
+          const markdown = await processEpisode(episode, podcastName, sourceLanguage);
           return { episode, markdown };
         } catch (e) {
           console.error(`Error processing episode ${episode.title}:`, e);

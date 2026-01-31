@@ -5,11 +5,13 @@ import * as yaml from 'js-yaml';
 interface YamlPodcastEntry {
   name: string;
   id: string;
+  language?: string;
 }
 
 export interface PodcastEntry {
   name: string;
   podcastIndexId: string;
+  language: string; // 元の言語 (e.g., 'ja', 'en')
 }
 
 export interface Config {
@@ -32,6 +34,7 @@ export function getConfig(): Config {
   const podcasts = (data?.podcasts ?? []).map((p) => ({
     name: p.name,
     podcastIndexId: String(p.id),
+    language: p.language ?? 'ja', // デフォルトは日本語
   }));
   return { podcasts };
 }
