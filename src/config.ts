@@ -2,9 +2,14 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
 
+interface YamlPodcastEntry {
+  name: string;
+  id: string;
+}
+
 export interface PodcastEntry {
   name: string;
-  feedId: string;
+  podcastIndexId: string;
 }
 
 export interface Config {
@@ -12,10 +17,10 @@ export interface Config {
 }
 
 export interface State {
-  lastChecked: Record<string, number>; // feedId -> timestamp (ms)
+  lastChecked: Record<string, number>; // id -> timestamp (ms)
 }
 
-const CONFIG_PATH = path.join(process.cwd(), 'config', 'podcasts.yaml');
+const CONFIG_PATH = path.join(process.cwd(), 'config', 'podcast-index.yaml');
 const STATE_PATH = path.join(process.cwd(), 'state', 'last-checked.json');
 
 export function getConfig(): Config {
@@ -23,8 +28,12 @@ export function getConfig(): Config {
     return { podcasts: [] };
   }
   const content = fs.readFileSync(CONFIG_PATH, 'utf-8');
-  const data = yaml.load(content) as { podcasts?: PodcastEntry[] } | null;
-  return { podcasts: data?.podcasts ?? [] };
+  const data = yaml.load(content) as { podcasts?: YamlPodcastEntry[] } | null;
+  const podcasts = (data?.podcasts ?? []).map((p) => ({
+    name: p.name,
+    podcastIndexId: p.id,
+  }));
+  return { podcasts };
 }
 
 export function getState(): State {
@@ -38,15 +47,15 @@ export function saveState(state: State): void {
   fs.writeFileSync(STATE_PATH, JSON.stringify(state, null, 2));
 }
 
-export function getLastChecked(feedId: string): Date | null {
+export function getLastChecked(id: string): Date | null {
   const state = getState();
-  const timestamp = state.lastChecked[feedId];
+  const timestamp = state.lastChecked[id];
   return timestamp ? new Date(timestamp) : null;
 }
 
-export function setLastChecked(feedId: string, date: Date): void {
+export function setLastChecked(id: string, date: Date): void {
   const state = getState();
-  state.lastChecked[feedId] = date.getTime();
+  state.lastChecked[id] = date.getTime();
   saveState(state);
 }
 

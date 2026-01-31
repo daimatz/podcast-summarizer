@@ -9,7 +9,7 @@ interface ProcessedEpisode {
   episode: Episode;
   markdown: CreatedMarkdown;
   podcastName: string;
-  feedId: string;
+  podcastIndexId: string;
 }
 
 async function processEpisode(episode: Episode, podcastName: string): Promise<CreatedMarkdown> {
@@ -51,16 +51,16 @@ async function main(): Promise<void> {
   }
 
   // 全ポッドキャストから新着エピソードを収集
-  const allTasks: Array<{ episode: Episode; podcastName: string; feedId: string }> = [];
+  const allTasks: Array<{ episode: Episode; podcastName: string; podcastIndexId: string }> = [];
 
   for (const podcast of config.podcasts) {
     try {
-      console.log(`\nChecking podcast: ${podcast.name} (feedId: ${podcast.feedId})`);
+      console.log(`\nChecking podcast: ${podcast.name} (id: ${podcast.podcastIndexId})`);
 
-      const lastChecked = getLastChecked(podcast.feedId);
+      const lastChecked = getLastChecked(podcast.podcastIndexId);
       console.log(`Last checked: ${lastChecked?.toISOString() ?? 'never'}`);
 
-      const episodes = await getEpisodesByFeedId(podcast.feedId, lastChecked);
+      const episodes = await getEpisodesByFeedId(podcast.podcastIndexId, lastChecked);
 
       if (episodes.length === 0) {
         console.log('No new episodes');
@@ -70,7 +70,7 @@ async function main(): Promise<void> {
       console.log(`Found ${episodes.length} new episode(s)`);
 
       for (const episode of episodes) {
-        allTasks.push({ episode, podcastName: podcast.name, feedId: podcast.feedId });
+        allTasks.push({ episode, podcastName: podcast.name, podcastIndexId: podcast.podcastIndexId });
       }
     } catch (e) {
       console.error(`Error checking podcast ${podcast.name}:`, e);
@@ -91,7 +91,7 @@ async function main(): Promise<void> {
       limit(async (): Promise<ProcessedEpisode | null> => {
         try {
           const markdown = await processEpisode(task.episode, task.podcastName);
-          return { episode: task.episode, markdown, podcastName: task.podcastName, feedId: task.feedId };
+          return { episode: task.episode, markdown, podcastName: task.podcastName, podcastIndexId: task.podcastIndexId };
         } catch (e) {
           console.error(`Error processing episode ${task.episode.title}:`, e);
           return null;
@@ -102,16 +102,16 @@ async function main(): Promise<void> {
 
   const processed = results.filter((r): r is ProcessedEpisode => r !== null);
 
-  // 処理成功したエピソードのlastCheckedを更新（feedIdごとに最新のpubDateを設定）
+  // 処理成功したエピソードのlastCheckedを更新（podcastIndexIdごとに最新のpubDateを設定）
   const latestByFeed = new Map<string, number>();
   for (const p of processed) {
-    const current = latestByFeed.get(p.feedId) ?? 0;
+    const current = latestByFeed.get(p.podcastIndexId) ?? 0;
     if (p.episode.pubDateMs > current) {
-      latestByFeed.set(p.feedId, p.episode.pubDateMs);
+      latestByFeed.set(p.podcastIndexId, p.episode.pubDateMs);
     }
   }
-  for (const [feedId, pubDateMs] of latestByFeed) {
-    setLastChecked(feedId, new Date(pubDateMs));
+  for (const [podcastIndexId, pubDateMs] of latestByFeed) {
+    setLastChecked(podcastIndexId, new Date(pubDateMs));
   }
 
   if (processed.length > 0) {
