@@ -4,8 +4,13 @@ import { getConfig } from './config.js';
 import { getEpisodesByFeedId, type Episode } from './podcastIndex.js';
 import { transcribeWithRetry } from './lemonfox.js';
 import { formatTranscript, summarize400, summarize2000 } from './claude.js';
-import { createEpisodeMarkdown } from './markdown.js';
+import { createEpisodeMarkdown, type CreatedMarkdown } from './markdown.js';
 import pLimit from 'p-limit';
+
+interface ProcessedEpisode {
+  episode: Episode;
+  markdown: CreatedMarkdown;
+}
 
 function sanitizeFilename(name: string): string {
   return name
@@ -28,7 +33,7 @@ function isAlreadyImported(episodeId: string, podcastName: string): boolean {
   return files.some((file) => file.includes(`-${episodeId}-`));
 }
 
-async function processEpisode(episode: Episode, podcastName: string): Promise<void> {
+async function processEpisode(episode: Episode, podcastName: string): Promise<CreatedMarkdown> {
   console.log(`Processing: ${episode.title}`);
   console.log(`Audio URL: ${episode.audioUrl}`);
 
@@ -48,6 +53,8 @@ async function processEpisode(episode: Episode, podcastName: string): Promise<vo
   console.log('Creating Markdown...');
   const markdown = createEpisodeMarkdown(episode, podcastName, formatted, summary400Text, summary2000Text);
   console.log(`Markdown created: ${markdown.filePath}`);
+
+  return markdown;
 }
 
 async function main(): Promise<void> {
@@ -99,17 +106,41 @@ async function main(): Promise<void> {
   console.log(`Importing ${newEpisodes.length} new episode(s) with concurrency limit of 3...`);
 
   const limit = pLimit(3);
-  await Promise.all(
+  const results = await Promise.all(
     newEpisodes.map((episode) =>
-      limit(async () => {
+      limit(async (): Promise<ProcessedEpisode | null> => {
         try {
-          await processEpisode(episode, podcastName);
+          const markdown = await processEpisode(episode, podcastName);
+          return { episode, markdown };
         } catch (e) {
           console.error(`Error processing episode ${episode.title}:`, e);
+          return null;
         }
       })
     )
   );
+
+  const processed = results.filter((r): r is ProcessedEpisode => r !== null);
+
+  if (processed.length > 0) {
+    console.log('\n=== Imported Episodes ===');
+    for (const { markdown } of processed) {
+      console.log(`- ${markdown.title}`);
+    }
+
+    // GitHub Actions 用の出力
+    const githubOutput = process.env.GITHUB_OUTPUT;
+    if (githubOutput) {
+      const episodeItems = processed
+        .map((p) => {
+          const url = `https://github.com/${process.env.GITHUB_REPOSITORY}/blob/main/${encodeURI(p.markdown.relativePath)}`;
+          return `<li><a href="${url}">${p.markdown.title}</a></li>`;
+        })
+        .join('\n');
+      const episodeList = `<ul>\n${episodeItems}\n</ul>`;
+      fs.appendFileSync(githubOutput, `episodes<<EOF\n${episodeList}\nEOF\n`);
+    }
+  }
 
   console.log('Import complete');
 }
