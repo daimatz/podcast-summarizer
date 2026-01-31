@@ -1,4 +1,11 @@
 import { getEnv } from './config.js';
+import { Agent, fetch as undiciFetch } from 'undici';
+
+const agent = new Agent({
+  headersTimeout: 900000, // 15分
+  bodyTimeout: 900000,    // 15分
+  connectTimeout: 60000,  // 1分
+});
 
 const CLAUDE_BASE_URL = 'https://api.anthropic.com/v1';
 const CLAUDE_MODEL = 'claude-sonnet-4-5-20250929';
@@ -34,7 +41,7 @@ async function callClaude(systemPrompt: string, userMessage: string, maxTokens: 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 900000); // 15分タイムアウト
 
-      const response = await fetch(`${CLAUDE_BASE_URL}/messages`, {
+      const response = await undiciFetch(`${CLAUDE_BASE_URL}/messages`, {
         method: 'POST',
         headers: {
           'x-api-key': apiKey,
@@ -48,6 +55,7 @@ async function callClaude(systemPrompt: string, userMessage: string, maxTokens: 
           messages: [{ role: 'user', content: userMessage }],
         }),
         signal: controller.signal,
+        dispatcher: agent,
       });
 
       clearTimeout(timeoutId);
