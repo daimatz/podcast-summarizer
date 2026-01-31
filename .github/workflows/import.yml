@@ -1,0 +1,61 @@
+name: Import Past Episodes
+
+on:
+  workflow_dispatch:
+    inputs:
+      id:
+        description: 'Podcast Index ID (must be in config file)'
+        required: true
+        type: string
+      last:
+        description: 'Import last N episodes'
+        required: true
+        default: '5'
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Import episodes
+        env:
+          PI_API_KEY: ${{ secrets.PI_API_KEY }}
+          PI_API_SECRET: ${{ secrets.PI_API_SECRET }}
+          LEMONFOX_KEY: ${{ secrets.LEMONFOX_KEY }}
+          CLAUDE_KEY: ${{ secrets.CLAUDE_KEY }}
+          PODCAST_INDEX_ID: ${{ inputs.id }}
+          LAST_N: ${{ inputs.last }}
+        run: npm run import
+
+      - name: Check for changes
+        id: changes
+        run: |
+          git add -A
+          if git diff --staged --quiet; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit and push
+        if: steps.changes.outputs.has_changes == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -m "Import past episodes (ID: ${{ inputs.id }})"
+          git push

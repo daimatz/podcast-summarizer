@@ -6,7 +6,8 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "tsx src/index.ts"
+    "dev": "tsx src/index.ts",
+    "import": "tsx src/import.ts"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",

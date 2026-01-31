@@ -48,10 +48,11 @@ export function createEpisodeMarkdown(
 ): CreatedMarkdown {
   const dateStr = formatDate(new Date(episode.pubDateMs));
   const title = `[${podcastName}] ${episode.title} - ${dateStr}`;
-  const filename = `${dateStr}-${sanitizeFilename(episode.title)}.md`;
+  const filename = `${dateStr}-${episode.id}-${sanitizeFilename(episode.title)}.md`;
   const podcastDir = sanitizeFilename(podcastName);
 
   const content = `---
+episode_id: ${episode.id}
 title: "${episode.title.replace(/"/g, '\\"')}"
 podcast: "${podcastName}"
 date: ${dateStr}
