@@ -44,10 +44,10 @@ git merge upstream/main
 git push origin main
 ```
 
-`config/podcasts.yaml` や `state/` でコンフリクトが発生した場合は、自分の変更を優先:
+`config/podcast-index.yaml` や `state/` でコンフリクトが発生した場合は、自分の変更を優先:
 
 ```bash
-git checkout --ours config/podcasts.yaml
+git checkout --ours config/podcast-index.yaml
 git checkout --ours state/last-checked.json
 git add .
 git commit
@@ -69,17 +69,17 @@ git commit
 
 ### 3. Podcast の登録
 
-`config/podcasts.yaml` を編集:
+`config/podcast-index.yaml` を編集:
 
 ```yaml
 podcasts:
   - name: Rebuild
-    feedId: 316425
+    id: 316425
   - name: backspace.fm
-    feedId: 123456
+    id: 123456
 ```
 
-`feedId` は Podcast Index の Feed ID です。以下で検索できます:
+`id` は Podcast Index の Feed ID です。以下で検索できます:
 ```bash
 curl "https://api.podcastindex.org/api/1.0/search/byterm?q=Rebuild" \
   -H "X-Auth-Key: ${PI_API_KEY}" \
@@ -91,6 +91,18 @@ curl "https://api.podcastindex.org/api/1.0/search/byterm?q=Rebuild" \
 
 Actions タブ → Podcast Summarizer → Run workflow
 
+## 過去エピソードのインポート
+
+登録済みの Podcast から過去のエピソードをインポートできます。
+
+1. Actions タブ → **Import Past Episodes** → Run workflow
+2. 以下を入力:
+   - `id`: Podcast Index ID（config に登録済みのもの）
+   - `last`: インポートする件数（デフォルト: 5）
+3. Run workflow をクリック
+
+既にインポート済みのエピソードは自動的にスキップされます。
+
 ## ローカル実行
 
 ```bash
@@ -101,24 +113,37 @@ export CLAUDE_KEY=...
 npm run dev
 ```
 
+## 移行スクリプト
+
+### エピソードIDをファイル名に追加
+
+既存のエピソードファイルにエピソードIDを追加する移行:
+
+```bash
+npm run migrate:add-episode-id
+```
+
 ## ファイル構成
 
 ```
 podcast-summarizer/
 ├── .github/workflows/
-│   └── summarize.yml     # GitHub Actions ワークフロー
+│   ├── summarize.yml         # 定期実行ワークフロー
+│   └── import.yml            # 過去エピソードインポート
 ├── src/
-│   ├── index.ts          # エントリーポイント
-│   ├── config.ts         # 設定管理
-│   ├── podcastIndex.ts   # Podcast Index API
-│   ├── lemonfox.ts       # 音声文字起こし
-│   ├── claude.ts         # Claude API（整形・要約）
-│   └── markdown.ts       # Markdown 生成
+│   ├── index.ts              # エントリーポイント
+│   ├── import.ts             # 過去エピソードインポート
+│   ├── migrate-add-episode-id.ts  # 移行スクリプト
+│   ├── config.ts             # 設定管理
+│   ├── podcastIndex.ts       # Podcast Index API
+│   ├── lemonfox.ts           # 音声文字起こし
+│   ├── claude.ts             # Claude API（整形・要約）
+│   └── markdown.ts           # Markdown 生成
 ├── config/
-│   └── podcasts.yaml     # 購読 Podcast リスト
+│   └── podcast-index.yaml    # 購読 Podcast リスト
 ├── state/
-│   └── last-checked.json # 最終確認日時
-└── episodes/             # 生成された要約
+│   └── last-checked.json     # 最終確認日時
+└── episodes/                 # 生成された要約
 ```
 
 ## 生成されるドキュメント
@@ -130,9 +155,11 @@ podcast-summarizer/
 3. **サマリ（2000文字）** - 詳細な要約
 4. **全文書き起こし** - 話者分離・セクション分けされた文字起こし
 
+ファイル名形式: `{date}-{episodeId}-{title}.md`
+
 ## スケジュール
 
-デフォルトで毎日 15:00 JST (06:00 UTC) に実行されます。
+毎日 07:00 と 19:00 JST に実行されます。
 `.github/workflows/summarize.yml` の cron 設定で変更可能。
 
 ## 注意事項
