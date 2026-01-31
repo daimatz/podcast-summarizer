@@ -92,9 +92,13 @@ async function main(): Promise<void> {
     const githubOutput = process.env.GITHUB_OUTPUT;
     if (githubOutput) {
       const fs = await import('fs');
-      const episodeList = processed
-        .map((p) => `- [${p.markdown.title}](https://github.com/${process.env.GITHUB_REPOSITORY}/blob/main/${p.markdown.relativePath})`)
+      const episodeItems = processed
+        .map((p) => {
+          const url = `https://github.com/${process.env.GITHUB_REPOSITORY}/blob/main/${encodeURI(p.markdown.relativePath)}`;
+          return `<li><a href="${url}">${p.markdown.title}</a></li>`;
+        })
         .join('\n');
+      const episodeList = `<ul>\n${episodeItems}\n</ul>`;
       fs.appendFileSync(githubOutput, `episodes<<EOF\n${episodeList}\nEOF\n`);
     }
   } else {
