@@ -2,6 +2,18 @@ import * as crypto from 'crypto';
 import { getEnv } from './config.js';
 
 const PODCAST_INDEX_BASE_URL = 'https://api.podcastindex.org/api/1.0';
+const REQUEST_INTERVAL_MS = 200; // 5 requests/second max
+
+let lastRequestTime = 0;
+
+async function throttle(): Promise<void> {
+  const now = Date.now();
+  const elapsed = now - lastRequestTime;
+  if (elapsed < REQUEST_INTERVAL_MS) {
+    await new Promise((resolve) => setTimeout(resolve, REQUEST_INTERVAL_MS - elapsed));
+  }
+  lastRequestTime = Date.now();
+}
 
 export interface Episode {
   id: string;
@@ -72,6 +84,7 @@ export async function getEpisodesByFeedId(feedId: string, since: Date | null): P
     url += `&since=${sinceTimestamp}`;
   }
 
+  await throttle();
   const response = await fetch(url, {
     method: 'GET',
     headers: getPodcastIndexHeaders(),
@@ -99,6 +112,7 @@ export async function getEpisodesByFeedId(feedId: string, since: Date | null): P
 export async function searchPodcastByName(query: string): Promise<{ feedId: string; title: string }[]> {
   const url = `${PODCAST_INDEX_BASE_URL}/search/byterm?q=${encodeURIComponent(query)}`;
 
+  await throttle();
   const response = await fetch(url, {
     method: 'GET',
     headers: getPodcastIndexHeaders(),
