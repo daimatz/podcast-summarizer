@@ -182,13 +182,18 @@ export async function formatTranscript(rawText: string): Promise<FormattedTransc
     return { sections: parsed.sections, fullText };
   }
 
-  console.log(`Processing ${chunks.length} chunks sequentially...`);
+  console.log(`Processing ${chunks.length} chunks in parallel...`);
+
+  const results = await Promise.all(
+    chunks.map((chunk, i) => {
+      const partInfo = `これはPodcastの${i + 1}/${chunks.length}パート目です。`;
+      return callClaude(buildFormatSystemPrompt(partInfo), chunk, 16384);
+    })
+  );
 
   const allSections: Section[] = [];
-  for (let i = 0; i < chunks.length; i++) {
-    const partInfo = `これはPodcastの${i + 1}/${chunks.length}パート目です。`;
-    const result = await callClaude(buildFormatSystemPrompt(partInfo), chunks[i], 16384);
-    const parsed = parseFormatResult(result);
+  for (let i = 0; i < results.length; i++) {
+    const parsed = parseFormatResult(results[i]);
     console.log(`Chunk ${i + 1}: ${parsed.sections.length} sections`);
     allSections.push(...parsed.sections);
   }
