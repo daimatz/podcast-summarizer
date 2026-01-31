@@ -61,9 +61,9 @@ audio: ${episode.audioUrl}
 
 # ${episode.title}
 
-**Podcast:** ${podcastName}
-**公開日:** ${dateStr}
-**リンク:** [${cleanUrl(episode.link)}](${cleanUrl(episode.link)})
+- **Podcast:** ${podcastName}
+- **公開日:** ${dateStr}
+- **リンク:** [${cleanUrl(episode.link)}](${cleanUrl(episode.link)})
 
 ---
 

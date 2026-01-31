@@ -91,6 +91,12 @@ async function callClaude(systemPrompt: string, userMessage: string, maxTokens: 
 
 const FORMAT_CHUNK_THRESHOLD = 12000;
 
+function emphasizeSpeakers(content: string): string {
+  // 話者パターン: 行頭または改行後の「名前:」を太字に変換
+  // 例: "ホスト:" → "**ホスト:**", "田中:" → "**田中:**"
+  return content.replace(/(^|\n)([^:\n]+):/g, '$1**$2:**');
+}
+
 function findSentenceBoundary(text: string, targetPosition: number): number {
   for (let i = targetPosition; i < Math.min(text.length, targetPosition + 500); i++) {
     if (text[i] === '。' || text[i] === '.' || text[i] === '\n') {
@@ -178,7 +184,7 @@ export async function formatTranscript(rawText: string): Promise<FormattedTransc
     console.log(`Processing as single chunk (${rawText.length} chars)`);
     const result = await callClaude(buildFormatSystemPrompt(), rawText, 16384);
     const parsed = parseFormatResult(result);
-    const fullText = parsed.sections.map((s) => `## ${s.title}\n\n${s.content}`).join('\n\n---\n\n');
+    const fullText = parsed.sections.map((s) => `## ${s.title}\n\n${emphasizeSpeakers(s.content)}`).join('\n\n---\n\n');
     return { sections: parsed.sections, fullText };
   }
 
@@ -198,7 +204,7 @@ export async function formatTranscript(rawText: string): Promise<FormattedTransc
     allSections.push(...parsed.sections);
   }
 
-  const fullText = allSections.map((s) => `## ${s.title}\n\n${s.content}`).join('\n\n---\n\n');
+  const fullText = allSections.map((s) => `## ${s.title}\n\n${emphasizeSpeakers(s.content)}`).join('\n\n---\n\n');
 
   console.log(`Combined: ${allSections.length} sections total`);
 
