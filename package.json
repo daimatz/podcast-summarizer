@@ -7,7 +7,8 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
-    "import": "tsx src/import.ts"
+    "import": "tsx src/import.ts",
+    "migrate:add-episode-id": "tsx src/migrate-add-episode-id.ts"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
