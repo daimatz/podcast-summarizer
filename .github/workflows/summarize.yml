@@ -63,11 +63,12 @@ jobs:
           subject: "New Podcast Summaries Available"
           to: ${{ secrets.NOTIFICATION_EMAIL }}
           from: Podcast Summarizer
-          body: |
-            新しいポッドキャストの要約が追加されました。
+          html_body: |
+            <p>新しいポッドキャストの要約が追加されました。</p>
 
-            リポジトリで確認:
-            https://github.com/${{ github.repository }}/tree/main/episodes
+            <h3>更新されたエピソード:</h3>
+            ${{ steps.summarize.outputs.episodes }}
 
-            ---
-            Podcast Summarizer
+            <hr>
+            <p><a href="https://github.com/${{ github.repository }}/tree/main/episodes">すべてのエピソードを見る</a></p>
+            <p>Podcast Summarizer</p>

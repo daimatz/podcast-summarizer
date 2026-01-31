@@ -88,9 +88,15 @@ async function main(): Promise<void> {
       console.log(`- ${markdown.title}`);
     }
 
-    // GitHub Actions 用の出力
-    const summary = processed.map((p) => `- ${p.markdown.title}`).join('\n');
-    console.log(`\n::set-output name=summary::${summary.replace(/\n/g, '%0A')}`);
+    // GitHub Actions 用の出力（GITHUB_OUTPUT環境ファイルを使用）
+    const githubOutput = process.env.GITHUB_OUTPUT;
+    if (githubOutput) {
+      const fs = await import('fs');
+      const episodeList = processed
+        .map((p) => `- [${p.markdown.title}](https://github.com/${process.env.GITHUB_REPOSITORY}/blob/main/${p.markdown.relativePath})`)
+        .join('\n');
+      fs.appendFileSync(githubOutput, `episodes<<EOF\n${episodeList}\nEOF\n`);
+    }
   } else {
     console.log('\nNo new episodes processed');
   }
