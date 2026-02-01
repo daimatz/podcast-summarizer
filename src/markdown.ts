@@ -61,21 +61,13 @@ export function createEpisodeMarkdown(
 
   const needsTranslation = sourceLanguage !== 'ja' && translated;
 
-  const content = `---
-episode_id: ${episode.id}
-title: "${episode.title.replace(/"/g, '\\"')}"
-podcast: "${podcastName}"
-date: ${dateStr}
-link: ${cleanUrl(episode.link)}
-audio: ${episode.audioUrl}
-language: ${sourceLanguage}
----
-
-# ${episode.title}
+  const content = `# ${episode.title}
 
 - **Podcast:** ${podcastName}
+- **Episode ID:** ${episode.id}
 - **公開日:** ${dateStr}
 - **リンク:** [${cleanUrl(episode.link)}](${cleanUrl(episode.link)})
+- **音声:** [${episode.audioUrl}](${episode.audioUrl})
 - **元の言語:** ${sourceLanguage}
 
 ---
