@@ -74,11 +74,16 @@ jobs:
           to: ${{ secrets.NOTIFICATION_EMAIL }}
           from: Podcast Summarizer
           html_body: |
-            <p>過去のポッドキャストエピソードがインポートされました。</p>
-
-            <h3>インポートされたエピソード:</h3>
-            ${{ steps.import.outputs.episodes }}
-
-            <hr>
-            <p><a href="https://github.com/${{ github.repository }}/tree/main/episodes">すべてのエピソードを見る</a></p>
-            <p>Podcast Summarizer</p>
+            <div style="max-width:600px;margin:0 auto;font-family:'Helvetica Neue',Arial,sans-serif;color:#333;">
+              <div style="background:#1a73e8;padding:20px 24px;border-radius:8px 8px 0 0;">
+                <h2 style="margin:0;color:#fff;font-size:20px;">Podcast Summarizer</h2>
+              </div>
+              <div style="padding:24px;border:1px solid #e0e0e0;border-top:none;border-radius:0 0 8px 8px;">
+                <p style="margin:0 0 20px 0;font-size:15px;">過去のポッドキャストエピソードがインポートされました。</p>
+                ${{ steps.import.outputs.episodes }}
+                <hr style="border:none;border-top:1px solid #e0e0e0;margin:24px 0;">
+                <p style="margin:0;text-align:center;">
+                  <a href="https://github.com/${{ github.repository }}/tree/main/episodes" style="color:#1a73e8;text-decoration:none;font-size:14px;">すべてのエピソードを見る</a>
+                </p>
+              </div>
+            </div>

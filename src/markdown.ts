@@ -37,6 +37,7 @@ export interface CreatedMarkdown {
   title: string;
   filePath: string;
   relativePath: string;
+  summary400: string;
 }
 
 export interface TranslatedContent {
@@ -113,10 +114,13 @@ ${formatted.fullText}
   const filePath = path.join(episodesDir, filename);
   fs.writeFileSync(filePath, content);
 
+  const displaySummary400 = (sourceLanguage !== 'ja' && translated) ? translated.summary400 : summary400;
+
   return {
     title,
     filePath,
     relativePath: `episodes/${podcastDir}/${filename}`,
+    summary400: displaySummary400,
   };
 }
 

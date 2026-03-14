@@ -153,10 +153,13 @@ async function main(): Promise<void> {
       const episodeItems = processed
         .map((p) => {
           const url = `https://github.com/${process.env.GITHUB_REPOSITORY}/blob/main/${encodeURI(p.markdown.relativePath)}`;
-          return `<li><a href="${url}">${p.markdown.title}</a></li>`;
+          return `<div style="margin-bottom:24px;padding:16px;border:1px solid #e0e0e0;border-radius:8px;background:#fafafa;">
+  <h4 style="margin:0 0 8px 0;"><a href="${url}" style="color:#1a73e8;text-decoration:none;">${p.markdown.title}</a></h4>
+  <p style="margin:0;color:#333;font-size:14px;line-height:1.6;">${p.markdown.summary400}</p>
+</div>`;
         })
         .join('\n');
-      const episodeList = `<ul>\n${episodeItems}\n</ul>`;
+      const episodeList = episodeItems;
       fs.appendFileSync(githubOutput, `episodes<<EOF\n${episodeList}\nEOF\n`);
     }
   }
